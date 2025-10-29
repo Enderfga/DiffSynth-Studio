@@ -627,6 +627,9 @@ class WanAnimateAdapter(torch.nn.Module):
     def after_patch_embedding(self, x: List[torch.Tensor], pose_latents, face_pixel_values):
         pose_latents = self.pose_patch_embedding(pose_latents)
         x[:, :, 1:] += pose_latents
+
+        if getattr(self, "pose_only_mode", False):
+            return x, None
         
         b,c,T,h,w = face_pixel_values.shape
         face_pixel_values = rearrange(face_pixel_values, "b c t h w -> (b t) c h w")
@@ -651,6 +654,8 @@ class WanAnimateAdapter(torch.nn.Module):
         return x, motion_vec
     
     def after_transformer_block(self, block_idx, x, motion_vec, motion_masks=None):
+        if motion_vec is None:
+            return x
         if block_idx % 5 == 0:
             adapter_args = [x, motion_vec, motion_masks, False]
             residual_out = self.face_adapter.fuser_blocks[block_idx // 5](*adapter_args)
