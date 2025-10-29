@@ -43,12 +43,16 @@ class WanTrainingModule(DiffusionTrainingModule):
             and hasattr(self.pipe, "animate_adapter")
             and self.pipe.animate_adapter is not None
         ):
+            adapter = self.pipe.animate_adapter
+            adapter.requires_grad_(False)
             prefix = "pipe.animate_adapter."
             self.pose_only_param_name_set = {
                 f"{prefix}{name}"
                 for name, _ in self.pipe.animate_adapter.named_parameters()
                 if name.startswith("pose_patch_embedding")
             }
+            adapter.pose_patch_embedding.requires_grad_(True)
+            adapter.pose_patch_embedding.train()
         
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
