@@ -35,6 +35,7 @@ class WanTrainingModule(DiffusionTrainingModule):
         )
 
         self.animate_adapter_pose_only = animate_adapter_pose_only
+        self.pose_only_param_name_set = None
         if (
             self.animate_adapter_pose_only
             and trainable_models is not None
@@ -42,10 +43,12 @@ class WanTrainingModule(DiffusionTrainingModule):
             and hasattr(self.pipe, "animate_adapter")
             and self.pipe.animate_adapter is not None
         ):
-            adapter = self.pipe.animate_adapter
-            adapter.requires_grad_(False)
-            adapter.pose_patch_embedding.requires_grad_(True)
-            adapter.pose_patch_embedding.train()
+            prefix = "pipe.animate_adapter."
+            self.pose_only_param_name_set = {
+                f"{prefix}{name}"
+                for name, _ in self.pipe.animate_adapter.named_parameters()
+                if name.startswith("pose_patch_embedding")
+            }
         
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
@@ -103,6 +106,35 @@ class WanTrainingModule(DiffusionTrainingModule):
         models = {name: getattr(self.pipe, name) for name in self.pipe.in_iteration_models}
         loss = self.pipe.training_loss(**models, **inputs)
         return loss
+
+    def trainable_modules(self):
+        if not self.animate_adapter_pose_only or self.pose_only_param_name_set is None:
+            return super().trainable_modules()
+
+        def filtered():
+            for name, param in self.named_parameters():
+                if not param.requires_grad:
+                    continue
+                if name.startswith("pipe.animate_adapter."):
+                    if name in self.pose_only_param_name_set or "lora_" in name:
+                        yield param
+                else:
+                    yield param
+        return filtered()
+
+    def trainable_param_names(self):
+        if not self.animate_adapter_pose_only or self.pose_only_param_name_set is None:
+            return super().trainable_param_names()
+        allowed = set()
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            if name.startswith("pipe.animate_adapter."):
+                if name in self.pose_only_param_name_set or "lora_" in name:
+                    allowed.add(name)
+            else:
+                allowed.add(name)
+        return allowed
 
 
 if __name__ == "__main__":
