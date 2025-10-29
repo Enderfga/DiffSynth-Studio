@@ -634,7 +634,8 @@ class WanAnimateAdapter(torch.nn.Module):
             pose_latents = pose_latents[:, :, :t_x]
         x[:, :, 1:] += pose_latents
 
-        if getattr(self, "pose_only_mode", False):
+        face_video_available = face_pixel_values is not None
+        if getattr(self, "pose_only_mode", False) or not face_video_available:
             return x, None
         
         b,c,T,h,w = face_pixel_values.shape

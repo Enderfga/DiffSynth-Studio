@@ -1088,7 +1088,7 @@ class WanVideoPostUnit_AnimatePoseLatents(PipelineUnit):
         )
 
     def process(self, pipe: WanVideoPipeline, animate_pose_video, tiled, tile_size, tile_stride):
-        if animate_pose_video is None:
+        if animate_pose_video is None or len(animate_pose_video) == 0:
             return {}
         pipe.load_models_to_device(self.onload_model_names)
         animate_pose_video = pipe.preprocess_video(animate_pose_video)
@@ -1101,9 +1101,10 @@ class WanVideoPostUnit_AnimateFacePixelValues(PipelineUnit):
         super().__init__(take_over=True)
 
     def process(self, pipe: WanVideoPipeline, inputs_shared, inputs_posi, inputs_nega):
-        if inputs_shared.get("animate_face_video", None) is None:
+        animate_face_video = inputs_shared.get("animate_face_video", None)
+        if animate_face_video is None or len(animate_face_video) == 0:
             return inputs_shared, inputs_posi, inputs_nega
-        inputs_posi["face_pixel_values"] = pipe.preprocess_video(inputs_shared["animate_face_video"])
+        inputs_posi["face_pixel_values"] = pipe.preprocess_video(animate_face_video)
         inputs_nega["face_pixel_values"] = torch.zeros_like(inputs_posi["face_pixel_values"]) - 1
         return inputs_shared, inputs_posi, inputs_nega
 
@@ -1374,7 +1375,8 @@ def model_fn_wan_video(
     x = dit.patchify(x, control_camera_latents_input)
     
     # Animate
-    if pose_latents is not None and face_pixel_values is not None:
+    motion_vec = None
+    if pose_latents is not None:
         x, motion_vec = animate_adapter.after_patch_embedding(x, pose_latents, face_pixel_values)
     
     # Patchify
@@ -1450,7 +1452,7 @@ def model_fn_wan_video(
                 x = x + current_vace_hint * vace_scale
             
             # Animate
-            if pose_latents is not None and face_pixel_values is not None:
+            if motion_vec is not None:
                 x = animate_adapter.after_transformer_block(block_id, x, motion_vec)
         if tea_cache is not None:
             tea_cache.store(x)
