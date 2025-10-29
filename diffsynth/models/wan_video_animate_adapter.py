@@ -4,6 +4,7 @@ from torch.nn import functional as F
 import math
 from typing import Tuple, Optional, List
 from einops import rearrange
+from contextlib import nullcontext
 
 
 
@@ -606,8 +607,10 @@ class Generator(nn.Module):
         self.dec = Synthesis(motion_dim)
 
     def get_motion(self, img):
-        #motion_feat = self.enc.enc_motion(img)
-        motion_feat = torch.utils.checkpoint.checkpoint((self.enc.enc_motion), img, use_reentrant=True)
+        if torch.is_grad_enabled():
+            motion_feat = torch.utils.checkpoint.checkpoint((self.enc.enc_motion), img, use_reentrant=True)
+        else:
+            motion_feat = self.enc.enc_motion(img)
         motion = self.dec.direction(motion_feat)
         return motion
 
@@ -619,6 +622,7 @@ class WanAnimateAdapter(torch.nn.Module):
         self.motion_encoder = Generator(size=512, style_dim=512, motion_dim=20)
         self.face_adapter = FaceAdapter(heads_num=40, hidden_dim=5120, num_adapter_layers=40 // 5)
         self.face_encoder = FaceEncoder(in_dim=512, hidden_dim=5120, num_heads=4)
+        self.pose_only_mode = False
     
     def after_patch_embedding(self, x: List[torch.Tensor], pose_latents, face_pixel_values):
         pose_latents = self.pose_patch_embedding(pose_latents)
@@ -629,13 +633,17 @@ class WanAnimateAdapter(torch.nn.Module):
 
         encode_bs = 8
         face_pixel_values_tmp = []
-        for i in range(math.ceil(face_pixel_values.shape[0]/encode_bs)):
-            face_pixel_values_tmp.append(self.motion_encoder.get_motion(face_pixel_values[i*encode_bs:(i+1)*encode_bs]))
+        pose_only = getattr(self, "pose_only_mode", False)
+        grad_ctx = torch.no_grad() if pose_only else nullcontext()
+        with grad_ctx:
+            for i in range(math.ceil(face_pixel_values.shape[0]/encode_bs)):
+                face_pixel_values_tmp.append(self.motion_encoder.get_motion(face_pixel_values[i*encode_bs:(i+1)*encode_bs]))
 
-        motion_vec = torch.cat(face_pixel_values_tmp)
-        
-        motion_vec = rearrange(motion_vec, "(b t) c -> b t c", t=T)
-        motion_vec = self.face_encoder(motion_vec)
+            motion_vec = torch.cat(face_pixel_values_tmp)
+            motion_vec = rearrange(motion_vec, "(b t) c -> b t c", t=T)
+            motion_vec = self.face_encoder(motion_vec)
+        if pose_only:
+            motion_vec = motion_vec.detach()
 
         B, L, H, C = motion_vec.shape
         pad_face = torch.zeros(B, 1, H, C).type_as(motion_vec)
@@ -667,4 +675,3 @@ class WanAnimateAdapterStateDictConverter:
             if name.startswith("pose_patch_embedding.") or name.startswith("face_adapter") or name.startswith("face_encoder") or name.startswith("motion_encoder"):
                 state_dict_[name] = param
         return state_dict_
-

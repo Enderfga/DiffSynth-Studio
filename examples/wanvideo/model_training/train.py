@@ -33,26 +33,27 @@ class WanTrainingModule(DiffusionTrainingModule):
             lora_base_model, lora_target_modules, lora_rank, lora_checkpoint=lora_checkpoint,
             enable_fp8_training=False,
         )
-
         self.animate_adapter_pose_only = animate_adapter_pose_only
         self.pose_only_param_name_set = None
+        adapter = getattr(self.pipe, "animate_adapter", None)
+        if adapter is not None:
+            adapter.pose_only_mode = self.animate_adapter_pose_only
         if (
             self.animate_adapter_pose_only
             and trainable_models is not None
             and "animate_adapter" in {name.strip() for name in trainable_models.split(",")}
-            and hasattr(self.pipe, "animate_adapter")
-            and self.pipe.animate_adapter is not None
+            and adapter is not None
         ):
-            adapter = self.pipe.animate_adapter
-            adapter.requires_grad_(False)
+            for name, param in adapter.named_parameters():
+                if not name.startswith("pose_patch_embedding"):
+                    param.requires_grad_(False)
+            adapter.pose_patch_embedding.train()
             prefix = "pipe.animate_adapter."
             self.pose_only_param_name_set = {
                 f"{prefix}{name}"
-                for name, _ in self.pipe.animate_adapter.named_parameters()
+                for name, _ in adapter.named_parameters()
                 if name.startswith("pose_patch_embedding")
             }
-            adapter.pose_patch_embedding.requires_grad_(True)
-            adapter.pose_patch_embedding.train()
         
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
