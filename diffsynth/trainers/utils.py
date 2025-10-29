@@ -622,6 +622,7 @@ def wan_parser():
     parser.add_argument("--save_steps", type=int, default=None, help="Number of checkpoint saving invervals. If None, checkpoints will be saved every epoch.")
     parser.add_argument("--dataset_num_workers", type=int, default=0, help="Number of workers for data loading.")
     parser.add_argument("--weight_decay", type=float, default=0.01, help="Weight decay.")
+    parser.add_argument("--animate_adapter_pose_only", default=False, action="store_true", help="Fine-tune only the pose branch inside animate_adapter while keeping LoRA weights trainable.")
     return parser
 
 

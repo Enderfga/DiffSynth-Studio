@@ -18,6 +18,7 @@ class WanTrainingModule(DiffusionTrainingModule):
         extra_inputs=None,
         max_timestep_boundary=1.0,
         min_timestep_boundary=0.0,
+        animate_adapter_pose_only=False,
     ):
         super().__init__()
         # Load models
@@ -32,6 +33,27 @@ class WanTrainingModule(DiffusionTrainingModule):
             lora_base_model, lora_target_modules, lora_rank, lora_checkpoint=lora_checkpoint,
             enable_fp8_training=False,
         )
+
+        self.animate_adapter_pose_only = animate_adapter_pose_only
+        if (
+            self.animate_adapter_pose_only
+            and trainable_models is not None
+            and "animate_adapter" in {name.strip() for name in trainable_models.split(",")}
+            and hasattr(self.pipe, "animate_adapter")
+            and self.pipe.animate_adapter is not None
+        ):
+            adapter = self.pipe.animate_adapter
+            for name, param in adapter.named_parameters():
+                param.requires_grad_(("lora_" in name))
+            adapter.pose_patch_embedding.requires_grad_(True)
+            adapter.pose_patch_embedding.train()
+            # keep the rest evaluation-only to avoid inadvertent updates
+            if hasattr(adapter, "motion_encoder"):
+                adapter.motion_encoder.eval()
+            if hasattr(adapter, "face_encoder"):
+                adapter.face_encoder.eval()
+            if hasattr(adapter, "face_adapter"):
+                adapter.face_adapter.eval()
         
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
@@ -128,6 +150,7 @@ if __name__ == "__main__":
         extra_inputs=args.extra_inputs,
         max_timestep_boundary=args.max_timestep_boundary,
         min_timestep_boundary=args.min_timestep_boundary,
+        animate_adapter_pose_only=args.animate_adapter_pose_only,
     )
     model_logger = ModelLogger(
         args.output_path,
