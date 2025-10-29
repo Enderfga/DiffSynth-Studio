@@ -626,6 +626,12 @@ class WanAnimateAdapter(torch.nn.Module):
     
     def after_patch_embedding(self, x: List[torch.Tensor], pose_latents, face_pixel_values):
         pose_latents = self.pose_patch_embedding(pose_latents)
+        t_x = x.shape[2] - 1
+        t_pose = pose_latents.shape[2]
+        if t_pose < t_x:
+            pose_latents = F.pad(pose_latents, (0, 0, 0, 0, 0, t_x - t_pose))
+        elif t_pose > t_x:
+            pose_latents = pose_latents[:, :, :t_x]
         x[:, :, 1:] += pose_latents
 
         if getattr(self, "pose_only_mode", False):
