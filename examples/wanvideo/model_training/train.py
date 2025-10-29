@@ -43,17 +43,9 @@ class WanTrainingModule(DiffusionTrainingModule):
             and self.pipe.animate_adapter is not None
         ):
             adapter = self.pipe.animate_adapter
-            for name, param in adapter.named_parameters():
-                param.requires_grad_(("lora_" in name))
+            adapter.requires_grad_(False)
             adapter.pose_patch_embedding.requires_grad_(True)
             adapter.pose_patch_embedding.train()
-            # keep the rest evaluation-only to avoid inadvertent updates
-            if hasattr(adapter, "motion_encoder"):
-                adapter.motion_encoder.eval()
-            if hasattr(adapter, "face_encoder"):
-                adapter.face_encoder.eval()
-            if hasattr(adapter, "face_adapter"):
-                adapter.face_adapter.eval()
         
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
