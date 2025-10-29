@@ -12,5 +12,6 @@ accelerate launch --config_file examples/wanvideo/model_training/full/accelerate
   --remove_prefix_in_ckpt "pipe.animate_adapter." \
   --output_path "./models/train/Wan2.2-Animate-14B_full" \
   --trainable_models "animate_adapter" \
+  --animate_adapter_pose_only \
   --extra_inputs "input_image,animate_pose_video,animate_face_video" \
   --use_gradient_checkpointing_offload
